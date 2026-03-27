@@ -398,9 +398,14 @@ npm install
 
 This project is open source and available under the MIT License.
 
-## 👨‍💻 Author
+## 👨‍💻 Author & Contributors
 
 Built as a demonstration of distributed ledger systems and tampering detection.
+
+### Contributors
+- 👤 **Gauri Patil**
+- 👤 **Aditya Siras**
+- 👤 **Sushant Fokmare**
 
 ---
 
