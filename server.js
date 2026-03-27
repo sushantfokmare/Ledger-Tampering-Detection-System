@@ -265,7 +265,12 @@ app.use((err, req, res, next) => {
 // ========== START SERVER ==========
 
 const server = app.listen(PORT, () => {
-  initializeNode();
+  try {
+    initializeNode();
+  } catch (err) {
+    console.error('❌ Failed to initialize node:', err);
+    process.exit(1);
+  }
   
   console.log(`
 ╔════════════════════════════════════════════════════════════════╗
@@ -303,6 +308,21 @@ const server = app.listen(PORT, () => {
   `);
 });
 
+// Error handling for port conflicts
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ ERROR: Port ${PORT} is already in use!`);
+    console.error(`Solutions:`);
+    console.error(`  1. Kill existing process: Get-Process node | Stop-Process -Force`);
+    console.error(`  2. Use different port: PORT=3002 node server.js`);
+    console.error(`  3. Wait a few seconds and try again\n`);
+    process.exit(1);
+  } else {
+    console.error(`Server error: ${err.message}`);
+    process.exit(1);
+  }
+});
+
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('\n[Server] SIGTERM received, shutting down gracefully...');
@@ -318,6 +338,17 @@ process.on('SIGINT', () => {
     console.log('[Server] Server closed');
     process.exit(0);
   });
+});
+
+// Catch unhandled errors
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
 });
 
 module.exports = app;
