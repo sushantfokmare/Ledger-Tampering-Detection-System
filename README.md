@@ -14,6 +14,12 @@ A complete distributed ledger system with blockchain-like architecture demonstra
 - ✅ **Consensus Mechanism**: Longest valid chain wins (basic consensus)
 - ✅ **Peer Sync**: Automatic synchronization between nodes
 
+## 🚀 Live Demo
+
+**Try it now:** 🎉 [https://ledger-tampering-detection-system.onrender.com/](https://ledger-tampering-detection-system.onrender.com/)
+
+Open the link above to test the system live! Add blocks, validate the chain, and simulate tampering attacks to see the detection in action.
+
 ## 🏗️ Project Structure
 
 ```
