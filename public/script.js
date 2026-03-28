@@ -3,7 +3,8 @@
  * Handles all user interactions and API calls
  */
 
-const API_BASE_URL = 'http://localhost:' + window.location.port;
+// Automatically use the current domain (works on localhost and deployed servers)
+const API_BASE_URL = window.location.origin;
 
 // ========== Utility Functions ==========
 
