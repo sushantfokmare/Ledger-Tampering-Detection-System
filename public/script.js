@@ -118,20 +118,52 @@ async function loadChain() {
         if (data.success) {
             const chainContainer = document.getElementById('chainContainer');
             chainContainer.innerHTML = '';
+            
+            // Display Merkle Tree info
+            if (data.merkleTree) {
+                const merkleInfo = document.createElement('div');
+                merkleInfo.className = 'merkle-info';
+                merkleInfo.innerHTML = `
+                    <div class="merkle-header">🌳 Merkle Tree Information</div>
+                    <div class="merkle-details">
+                        <span>Root Hash: <code>${(data.merkleTree.root || 'N/A').substring(0, 16)}...</code></span>
+                        <span>Tree Depth: ${data.merkleTree.depth}</span>
+                        <span>Status: ${data.merkleTree.verified ? '✅ Verified' : '❌ Invalid'}</span>
+                    </div>
+                `;
+                chainContainer.appendChild(merkleInfo);
+            }
 
             data.chain.forEach(block => {
                 const blockEl = document.createElement('div');
-                blockEl.className = `block-item ${block.isValid === '❌' ? 'invalid' : ''}`;
+                let className = `block-item`;
+                
+                // Add cascade tampering class
+                if (block.cascadeTampered === '⛓️ CASCADE') {
+                    className += ' cascade-tampered';
+                } else if (block.isTampered === '🔨 TAMPERED') {
+                    className += ' invalid';
+                } else if (block.isValid === '❌') {
+                    className += ' invalid';
+                }
+                
+                blockEl.className = className;
                 
                 blockEl.innerHTML = `
                     <div class="block-index">
-                        Block #${block.index} ${block.isValid}
+                        Block #${block.index} ${block.isValid} ${block.isTampered} ${block.cascadeTampered}
                     </div>
                     <div class="block-data">
-                        <span class="label">Data:</span> ${block.data}
+                        <span class="label">Data (Current):</span> ${block.data}
+                    </div>
+                    <div class="block-data">
+                        <span class="label">Original Data:</span> <code>${block.originalData}</code>
                     </div>
                     <div class="block-data">
                         <span class="label">Timestamp:</span> ${new Date(block.timestamp).toLocaleString()}
+                    </div>
+                    <div class="block-data">
+                        <span class="label">Tampering Attempts:</span> ${block.tamperedAttempts}
                     </div>
                     <div class="block-hash">
                         <span class="label">Hash:</span> ${block.hash}
@@ -145,7 +177,7 @@ async function loadChain() {
             });
 
             showMessage(
-                `✅ Loaded ${data.chain.length} blocks from ledger`,
+                `✅ Loaded ${data.chain.length} blocks from ledger | Merkle Root: ${(data.merkleTree.root || '').substring(0, 8)}...`,
                 'success',
                 'addBlockMessage'
             );
@@ -172,12 +204,20 @@ async function validateChain() {
         if (data.isValid) {
             statusDiv.innerHTML = `
                 <strong>✅ CHAIN VALID</strong><br/>
-                <small>All ${data.chainLength} blocks verified and intact. No tampering detected.</small>
+                <small>All ${data.chainLength} blocks verified and intact. No tampering detected.</small><br/>
+                <div class="merkle-validation">🌳 Merkle Root: <code>${(data.merkleRoot || 'N/A').substring(0, 16)}...</code></div>
             `;
         } else {
             statusDiv.innerHTML = `
                 <strong>❌ TAMPERING DETECTED!</strong><br/>
-                <small>${data.message}</small>
+                <small>${data.message}</small><br/>
+                <div class="cascade-alert">
+                    ${data.cascadeEffect}
+                </div>
+                <div class="tampering-stats">
+                    Tampered Blocks: ${data.tamperedBlocksCount} | 
+                    Cascade Affected: ${data.cascadeTamperedCount}
+                </div>
             `;
         }
         

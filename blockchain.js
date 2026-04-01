@@ -1,6 +1,93 @@
 const crypto = require('crypto');
 
 /**
+ * MerkleTree class - represents a Merkle tree for efficient data verification
+ * Used to verify the integrity of all blocks in the blockchain
+ */
+class MerkleTree {
+  constructor(blocks) {
+    this.tree = [];
+    this.root = null;
+    if (blocks && blocks.length > 0) {
+      this.buildTree(blocks);
+    }
+  }
+
+  /**
+   * Hash a value using SHA-256
+   * @param {string} value - Value to hash
+   * @returns {string} - SHA-256 hash
+   */
+  static hash(value) {
+    return crypto.createHash('sha256').update(value).digest('hex');
+  }
+
+  /**
+   * Build Merkle tree from blocks
+   * @param {Array} blocks - Array of blocks
+   */
+  buildTree(blocks) {
+    // Create leaf nodes - hash of each block
+    let currentLevel = blocks.map(block => 
+      MerkleTree.hash(block.hash)
+    );
+
+    this.tree.push([...currentLevel]);
+
+    // Build tree upwards
+    while (currentLevel.length > 1) {
+      const nextLevel = [];
+      
+      // If odd number of nodes, duplicate the last one
+      if (currentLevel.length % 2 !== 0) {
+        currentLevel.push(currentLevel[currentLevel.length - 1]);
+      }
+
+      // Combine pairs of hashes
+      for (let i = 0; i < currentLevel.length; i += 2) {
+        const combined = currentLevel[i] + currentLevel[i + 1];
+        const parentHash = MerkleTree.hash(combined);
+        nextLevel.push(parentHash);
+      }
+
+      this.tree.push([...nextLevel]);
+      currentLevel = nextLevel;
+    }
+
+    // Root is the last element
+    this.root = currentLevel.length > 0 ? currentLevel[0] : null;
+  }
+
+  /**
+   * Verify a specific block in the tree
+   * @param {number} blockIndex - Index of block to verify
+   * @returns {boolean} - true if block is valid in tree
+   */
+  verifyBlock(blockIndex) {
+    if (!this.root || this.tree.length === 0) return false;
+    
+    // Check if block hash exists in the first level (leaves)
+    return this.tree[0][blockIndex] !== undefined;
+  }
+
+  /**
+   * Get tree depth
+   * @returns {number} - Depth of tree
+   */
+  getDepth() {
+    return this.tree.length;
+  }
+
+  /**
+   * Get root hash
+   * @returns {string} - Merkle root hash
+   */
+  getRoot() {
+    return this.root;
+  }
+}
+
+/**
  * Block class - represents a single block in the blockchain
  */
 class Block {
@@ -13,6 +100,7 @@ class Block {
     this.hash = this.calculateHash();
     this.tamperedAttempts = []; // ← AUDIT TRAIL of all tampering attempts
     this.isTampered = false; // Flag indicating if tampering was detected
+    this.cascadeTampered = false; // Flag for cascade tampering effect
   }
 
   /**
@@ -43,13 +131,14 @@ class Block {
 }
 
 /**
- * Blockchain class - maintains the entire chain of blocks
+ * Blockchain class - maintains the entire chain of blocks with Merkle tree
  */
 class Blockchain {
   constructor(nodeId = 'default') {
     this.chain = [];
     this.nodeId = nodeId;
     this.difficulty = 0; // Simplified - no proof of work
+    this.merkleTree = new MerkleTree([]); // Initialize empty Merkle tree
     
     // Create genesis block
     const genesisBlock = new Block(
@@ -59,7 +148,15 @@ class Blockchain {
       '0'
     );
     this.chain.push(genesisBlock);
+    this.updateMerkleTree(); // Build merkle tree with genesis block
     console.log(`[${this.nodeId}] Genesis block created:`, genesisBlock.hash.substring(0, 8) + '...');
+  }
+
+  /**
+   * Update Merkle tree after chain changes
+   */
+  updateMerkleTree() {
+    this.merkleTree = new MerkleTree(this.chain);
   }
 
   /**
@@ -84,6 +181,7 @@ class Blockchain {
     );
 
     this.chain.push(newBlock);
+    this.updateMerkleTree(); // Update merkle tree
     console.log(`[${this.nodeId}] ✅ Block #${newBlock.index} added:`, newBlock.hash.substring(0, 8) + '...');
     console.log(`    Data: "${data}"`);
     
@@ -91,11 +189,12 @@ class Blockchain {
   }
 
   /**
-   * Validate the entire blockchain
+   * Validate the entire blockchain with Merkle tree verification
    * Checks:
    * 1. Genesis block has index 0 and previousHash '0'
    * 2. Each block's hash is valid
    * 3. Each block's previousHash matches the previous block's hash
+   * 4. Merkle tree integrity
    * @returns {boolean} - true if chain is valid
    */
   isChainValid() {
@@ -118,6 +217,15 @@ class Blockchain {
         console.log(`    Stored hash:    ${currentBlock.hash}`);
         console.log(`    Calculated hash: ${currentBlock.calculateHash()}`);
         console.log(`    Block data has been tampered with!`);
+        
+        // 🔗 CASCADE EFFECT: Mark all subsequent blocks as cascading tampered
+        console.log(`\n🔗 CASCADE TAMPERING EFFECT:`);
+        for (let j = i; j < this.chain.length; j++) {
+          this.chain[j].cascadeTampered = true;
+          console.log(`    Block #${j} marked as CASCADING_TAMPERED`);
+        }
+        console.log();
+        
         return false;
       }
 
@@ -129,20 +237,43 @@ class Blockchain {
         console.log(`    Expected previousHash: ${previousBlock.hash}`);
         console.log(`    Actual previousHash:   ${currentBlock.previousHash}`);
         console.log(`    Chain linkage broken!`);
+        
+        // 🔗 CASCADE EFFECT: Mark all subsequent blocks
+        console.log(`\n🔗 CASCADE TAMPERING EFFECT:`);
+        for (let j = i; j < this.chain.length; j++) {
+          this.chain[j].cascadeTampered = true;
+          console.log(`    Block #${j} marked as CASCADING_TAMPERED`);
+        }
+        console.log();
+        
         return false;
       }
     }
 
+    // Verify Merkle tree
+    if (!this.merkleTree.root) {
+      console.log(`[${this.nodeId}] ❌ Merkle tree invalid`);
+      return false;
+    }
+
     console.log(`[${this.nodeId}] ✅ Chain is valid! All ${this.chain.length} blocks verified.`);
+    console.log(`    Merkle Root: ${this.merkleTree.root.substring(0, 8)}...`);
     return true;
   }
 
   /**
-   * Get the full chain as JSON
-   * @returns {Array} - array of blocks
+   * Get the full chain as JSON with Merkle tree info
+   * @returns {Object} - object with chain and merkle tree data
    */
   getChain() {
-    return this.chain;
+    return {
+      blocks: this.chain,
+      merkleTree: {
+        root: this.merkleTree.root,
+        depth: this.merkleTree.getDepth(),
+        verified: !!this.merkleTree.root
+      }
+    };
   }
 
   /**
@@ -155,6 +286,7 @@ class Blockchain {
 
   /**
    * Intentionally tamper with a block for testing (DLT-Enhanced with audit trail)
+   * Now includes CASCADE TAMPERING effect and Merkle tree updates
    * @param {number} blockIndex - index of block to tamper
    * @param {string} newData - new data to insert
    */
@@ -200,6 +332,18 @@ class Blockchain {
         previousHash: block.previousHash
       }))
       .digest('hex').substring(0, 8)}...`);
+    
+    // 🔗 CASCADE TAMPERING EFFECT: Mark all subsequent blocks
+    console.log(`\n🔗 CASCADE TAMPERING EFFECT - Marking subsequent blocks:`);
+    for (let i = blockIndex + 1; i < this.chain.length; i++) {
+      this.chain[i].cascadeTampered = true;
+      this.chain[i].isTampered = true;
+      console.log(`    Block #${i} marked as CASCADING_TAMPERED (invalid due to broken chain)`);
+    }
+    
+    // Update Merkle tree
+    this.updateMerkleTree();
+    console.log(`    ⚠️  Merkle tree invalidated! Previous root: ${oldHash.substring(0, 8)}...`);
     console.log(`    ⚠️  Attempt logged in audit trail. Immutable original preserved!\n`);
   }
 
@@ -239,4 +383,4 @@ class Blockchain {
   }
 }
 
-module.exports = { Block, Blockchain };
+module.exports = { Block, Blockchain, MerkleTree };

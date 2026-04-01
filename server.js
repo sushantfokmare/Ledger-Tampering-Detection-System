@@ -78,24 +78,29 @@ app.post('/addBlock', (req, res) => {
 });
 
 /**
- * GET /chain - Get the entire blockchain
+ * GET /chain - Get the entire blockchain with Merkle tree info
  */
 app.get('/chain', (req, res) => {
   try {
-    const chain = node.getBlockchain();
-    const formattedChain = chain.map((block, index) => ({
+    const blockchainData = node.blockchain.getChain();
+    const formattedChain = blockchainData.blocks.map((block, index) => ({
       index: block.index,
       timestamp: block.timestamp,
       data: block.data,
+      originalData: block.originalData,
       previousHash: block.previousHash.substring(0, 16) + '...',
       hash: block.hash,
-      isValid: block.isValid() ? '✅' : '❌'
+      isValid: block.isValid() ? '✅' : '❌',
+      isTampered: block.isTampered ? '🔨 TAMPERED' : '✓',
+      cascadeTampered: block.cascadeTampered ? '⛓️ CASCADE' : 'Valid',
+      tamperedAttempts: block.tamperedAttempts.length
     }));
 
     res.json({
       success: true,
       chainLength: formattedChain.length,
       chain: formattedChain,
+      merkleTree: blockchainData.merkleTree,
       nodeInfo: node.getNodeInfo()
     });
   } catch (error) {
@@ -104,19 +109,27 @@ app.get('/chain', (req, res) => {
 });
 
 /**
- * GET /validate - Validate the entire blockchain
+ * GET /validate - Validate the entire blockchain with cascade tampering detection
  */
 app.get('/validate', (req, res) => {
   try {
     const isValid = node.validateBlockchain();
+    
+    // Count cascade tampering blocks
+    const cascadeBlocks = node.blockchain.chain.filter(b => b.cascadeTampered).length;
+    const tamperedBlocks = node.blockchain.chain.filter(b => b.isTampered).length;
 
     res.json({
       success: true,
       isValid: isValid,
       chainLength: node.blockchain.getChainLength(),
+      tamperedBlocksCount: tamperedBlocks,
+      cascadeTamperedCount: cascadeBlocks,
+      merkleRoot: node.blockchain.merkleTree.root,
       message: isValid
         ? 'Blockchain is valid and intact'
-        : 'Blockchain has been tampered with! Tampering detected.'
+        : `❌ Blockchain has been tampered with! (${tamperedBlocks} tampered + ${cascadeBlocks} cascade affected)`,
+      cascadeEffect: cascadeBlocks > 0 ? `⛓️ CASCADE EFFECT: ${cascadeBlocks} blocks marked as invalid due to broken hash chain` : 'No cascade tampering'
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
